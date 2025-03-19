@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:metadata_god/metadata_god.dart';
+import 'package:flutter_media_metadata/flutter_media_metadata.dart';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:iam_music/models/song.dart';
@@ -22,6 +22,7 @@ class StorageService {
     '.m4a',
   ];
 
+  // Vérifier et demander la permission de stockage adaptée à la version Android
   static Future<bool> requestStoragePermission() async {
     if (Platform.isAndroid) {
       int sdkVersion = int.parse(await getSdkVersion());
@@ -59,31 +60,40 @@ class StorageService {
     return true;
   }
 
+  // Obtenir la version SDK de l'appareil Android
   static Future<String> getSdkVersion() async {
-    return await Process.run('getprop', ['ro.build.version.sdk']).then((result) {
+    return await Process.run('getprop', ['ro.build.version.sdk']).then((
+      result,
+    ) {
       return result.stdout.toString().trim();
     });
   }
 
+  // Sélectionner un dossier contenant des musiques
   static Future<List<Song>> pickSongFilesFromFolder() async {
     bool permissionGranted = await requestStoragePermission();
     if (!permissionGranted) {
       return [];
     }
 
+    // Ouvre le sélecteur de dossier
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
     if (selectedDirectory == null) {
       debugPrint("Aucun dossier sélectionné");
       return [];
     }
 
+    // Récupérer les fichiers audio du dossier
     Directory directory = Directory(selectedDirectory);
     if (!directory.existsSync()) {
-      debugPrint("⚠️ Le dossier sélectionné n'existe pas ou est inaccessible !");
+      debugPrint(
+        "⚠️ Le dossier sélectionné n'existe pas ou est inaccessible !",
+      );
       return [];
     }
 
     List folderPaths = await getSongFolderPaths();
+    debugPrint("📂 Dossiers enregistrés : $folderPaths");
     if (folderPaths.contains(selectedDirectory)) {
       debugPrint("Le dossier est déjà enregistré");
       return await loadSongList();
@@ -91,54 +101,58 @@ class StorageService {
 
     List<FileSystemEntity> files = directory.listSync();
     if (files.isEmpty) {
-      debugPrint("⚠️ Aucun fichier audio trouvé dans le dossier sélectionné");
+      debugPrint("���️ Aucun fichier audio trouvé dans le dossier sélectionné");
       return [];
     }
 
     List<Song> newSongList = [];
 
     for (var file in files) {
+      debugPrint("!! Creating new Song list with file: ${file.path}");
       if (file is File && _allowedExtensions.any(file.path.endsWith)) {
+        debugPrint("🔍 Traitement du fichier : ${file.path}");
         try {
-          debugPrint("➡️ Extraction des métadonnées : ${file.path}");
+          debugPrint("➡️ Début de l'extraction des métadonnées...");
+          final metadata = await MetadataRetriever.fromFile(File(file.path));
+          debugPrint("✅ Métadonnées extraites avec succès !");
 
-          Metadata metadata = await MetadataGod.readMetadata(file: file.path);
-
-          newSongList.add(Song(
-            path: file.path,
-            title: metadata.title ?? file.uri.pathSegments.last,
-            artist: metadata.artist ?? "Inconnu",
-            album: metadata.album ?? "Inconnu",
-            coverArt: metadata.picture != null
-                ? Uint8List.fromList(metadata.picture!.data)
-                : null,
-            id: file.hashCode.toString(), // ✅ Fixed closing parenthesis & semicolon
-          ));
-
+          newSongList.add(
+            Song(
+              path: file.path,
+              title: metadata.trackName ?? file.uri.pathSegments.last,
+              artist: metadata.albumArtistName ?? "Inconnu",
+              album: metadata.albumName ?? "Inconnu",
+              coverArt: metadata.albumArt,
+              id: file.hashCode.toString(),
+            ),
+          );
         } catch (e) {
           debugPrint("Erreur lors de l’extraction des métadonnées : $e");
         }
       }
     }
 
-
     if (newSongList.isEmpty) {
       debugPrint("⚠️ Aucun fichier audio trouvé dans le dossier sélectionné");
       return [];
     }
 
+    // Mise à jour et sauvegarde de la liste des musiques
     folderPaths.add(selectedDirectory);
     List<Song> lastSongList = await loadSongList();
     List<Song> allSong = [...lastSongList, ...newSongList];
-    allSong.sort((a, b) => a.artist.compareTo(b.artist));
+    allSong = allSong..sort((a, b) => a.artist.compareTo(b.artist));
     await saveSongList(allSong, folderPaths);
 
     debugPrint("✅ ${allSong.length} musiques chargées !");
     return allSong;
   }
 
+  // Sauvegarder la liste des musiques dans SharedPreferences
   static Future<void> saveSongList(
-      List<Song> SongList, List folderPaths) async {
+    List<Song> SongList,
+    List folderPaths,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final SongJsonList = SongList.map((Song) => Song.toJson()).toList();
     await prefs.setString(_SongListKey, jsonEncode(SongJsonList));
@@ -154,6 +168,7 @@ class StorageService {
     return [];
   }
 
+  // Charger la liste des musiques
   static Future<List<Song>> loadSongList() async {
     final prefs = await SharedPreferences.getInstance();
     String? SongListJson = prefs.getString(_SongListKey);
@@ -164,15 +179,17 @@ class StorageService {
     return [];
   }
 
+  // Sauvegarder la dernière musique jouée
   static Future<void> saveLastPlayedSong(Song Song) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_lastPlayedSongKey, Song.path);
   }
 
+  // Charger la dernière musique jouée
   static Future<Song?> getLastPlayedSong() async {
     final prefs = await SharedPreferences.getInstance();
     String? lastSongPlayedPath = prefs.getString(_lastPlayedSongKey);
-    List<Song> SongLists = await loadSongList();
+    List<Song>? SongLists = await loadSongList();
 
     if (lastSongPlayedPath != null) {
       try {
@@ -188,13 +205,15 @@ class StorageService {
 
   static const String _playlistKey = 'playlists';
 
+  // Sauvegarder les playlists dans SharedPreferences
   static Future<void> savePlaylists(List<Playlist> playlists) async {
     final prefs = await SharedPreferences.getInstance();
     final playlistJsonList =
-    playlists.map((playlist) => playlist.toJson()).toList();
+        playlists.map((playlist) => playlist.toJson()).toList();
     await prefs.setString(_playlistKey, jsonEncode(playlistJsonList));
   }
 
+  // Charger les playlists
   static Future<List<Playlist>> loadPlaylists() async {
     final prefs = await SharedPreferences.getInstance();
     String? playlistsJson = prefs.getString(_playlistKey);
