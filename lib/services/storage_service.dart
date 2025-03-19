@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'dart:convert';
 
-import 'package:flutter_media_metadata/flutter_media_metadata.dart';
+import 'package:audiotagger/audiotagger.dart';
+import 'package:audiotagger/models/tag.dart';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -63,8 +64,8 @@ class StorageService {
   // Obtenir la version SDK de l'appareil Android
   static Future<String> getSdkVersion() async {
     return await Process.run('getprop', ['ro.build.version.sdk']).then((
-      result,
-    ) {
+        result,
+        ) {
       return result.stdout.toString().trim();
     });
   }
@@ -101,7 +102,7 @@ class StorageService {
 
     List<FileSystemEntity> files = directory.listSync();
     if (files.isEmpty) {
-      debugPrint("���️ Aucun fichier audio trouvé dans le dossier sélectionné");
+      debugPrint("   ️ Aucun fichier audio trouvé dans le dossier sélectionné");
       return [];
     }
 
@@ -113,16 +114,18 @@ class StorageService {
         debugPrint("🔍 Traitement du fichier : ${file.path}");
         try {
           debugPrint("➡️ Début de l'extraction des métadonnées...");
-          final metadata = await MetadataRetriever.fromFile(File(file.path));
+          final tagger = Audiotagger();
+          final Tag? metadata = await tagger.readTags(path: file.path);
+
           debugPrint("✅ Métadonnées extraites avec succès !");
 
           newSongList.add(
             Song(
               path: file.path,
-              title: metadata.trackName ?? file.uri.pathSegments.last,
-              artist: metadata.albumArtistName ?? "Inconnu",
-              album: metadata.albumName ?? "Inconnu",
-              coverArt: metadata.albumArt,
+              title: metadata?.title ?? file.uri.pathSegments.last,
+              artist: metadata?.artist ?? "Inconnu",
+              album: metadata?.album ?? "Inconnu",
+              coverArt: metadata?.artwork != null ? File(metadata!.artwork!).readAsBytesSync() : null,
               id: file.hashCode.toString(),
             ),
           );
@@ -150,9 +153,9 @@ class StorageService {
 
   // Sauvegarder la liste des musiques dans SharedPreferences
   static Future<void> saveSongList(
-    List<Song> SongList,
-    List folderPaths,
-  ) async {
+      List<Song> SongList,
+      List folderPaths,
+      ) async {
     final prefs = await SharedPreferences.getInstance();
     final SongJsonList = SongList.map((Song) => Song.toJson()).toList();
     await prefs.setString(_SongListKey, jsonEncode(SongJsonList));
@@ -209,7 +212,7 @@ class StorageService {
   static Future<void> savePlaylists(List<Playlist> playlists) async {
     final prefs = await SharedPreferences.getInstance();
     final playlistJsonList =
-        playlists.map((playlist) => playlist.toJson()).toList();
+    playlists.map((playlist) => playlist.toJson()).toList();
     await prefs.setString(_playlistKey, jsonEncode(playlistJsonList));
   }
 
