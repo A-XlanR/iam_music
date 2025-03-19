@@ -113,6 +113,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.2.0"
+  audiotagger:
+    dependency: "direct main"
+    description:
+      name: audiotagger
+      sha256: "1be5df15f099a82282aa03602d5e8da155182d0a144b7bd0e82499a9f61d9b82"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.1"
   audiotags:
     dependency: "direct main"
     description:
@@ -278,14 +286,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.0"
-  flutter_media_metadata:
-    dependency: "direct main"
-    description:
-      name: flutter_media_metadata
-      sha256: "69cfc76ffd6cd5d546dcc4880584b3844c5e879e435aa54f57f1096c15bd04db"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.0+1"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
